@@ -1,0 +1,56 @@
+---
+title: "Day1"
+author: "Shale"
+date: "4/6/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(jsonlite)
+library(tidyverse)
+library(tidytext)
+library(ggplot2)
+```
+
+# Practice / Intro
+
+```{r}
+
+```
+
+
+# NYT API
+
+```{r}
+key <- "18y0Ab91lNz6AbLlBP0fFqmHTGlxAgOD"
+term <- "Montana" # Need to use + to string together separate words
+begin_date <- "20210101"
+end_date <- "20220401"
+
+# construct the query url using API operators
+baseurl <- paste0("http://api.nytimes.com/svc/search/v2/articlesearch.json?q=",term,
+                  "&begin_date=",begin_date,"&end_date=",end_date,
+                  "&facet_filter=true&api-key=",key, sep="")
+```
+
+```{r}
+# this code allows for obtaining multiple pages of query results 
+initialQuery <- fromJSON(baseurl)
+maxPages <- round((initialQuery$response$meta$hits[1] / 10)-1)
+
+pages <- list()
+for(i in 0:maxPages){
+  nytSearch <- fromJSON(paste0(baseurl, "&page=", i), flatten = TRUE) %>% data.frame() 
+  message("Retrieving page ", i)
+  pages[[i+1]] <- nytSearch 
+  Sys.sleep(6) # only 10 queries allowed per minute, so have to slow down loop to once every 6 seconds
+}
+```
+
+```{r}
+nytDat_par <- pages %>% reduce(full_join)
+
+```
+
