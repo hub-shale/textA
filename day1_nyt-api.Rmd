@@ -12,21 +12,15 @@ library(jsonlite)
 library(tidyverse)
 library(tidytext)
 library(ggplot2)
+library(here)
 ```
-
-# Practice / Intro
-
-```{r}
-
-```
-
 
 # NYT API
 
 ```{r}
 key <- "18y0Ab91lNz6AbLlBP0fFqmHTGlxAgOD"
-term <- "Montana" # Need to use + to string together separate words
-begin_date <- "20210101"
+term <- "Montana+mine" # Need to use + to string together separate words
+begin_date <- "20200101"
 end_date <- "20220401"
 
 # construct the query url using API operators
@@ -35,7 +29,7 @@ baseurl <- paste0("http://api.nytimes.com/svc/search/v2/articlesearch.json?q=",t
                   "&facet_filter=true&api-key=",key, sep="")
 ```
 
-```{r}
+```{r, eval=FALSE}
 # this code allows for obtaining multiple pages of query results 
 initialQuery <- fromJSON(baseurl)
 maxPages <- round((initialQuery$response$meta$hits[1] / 10)-1)
@@ -49,8 +43,79 @@ for(i in 0:maxPages){
 }
 ```
 
+```{r, eval=FALSE}
+nytDat <- rbind_pages(pages)
+write_csv(nytDat, "mt_text.csv")
+```
+Publications per day:
+
+Looks like something happened with Montana mining in May of 2020?
+
 ```{r}
-nytDat_par <- pages %>% reduce(full_join)
+nytDat = read_csv(here("mt_text.csv"))
+nytDat %>%
+  mutate(pubDay=gsub(" .*","",response.docs.pub_date)) %>% # exporting as csv removed the T
+  group_by(pubDay) %>%
+  summarise(count=n()) %>%
+  filter(count > 1) %>%
+  ggplot() +
+  geom_bar(aes(x=reorder(pubDay, count), y=count), stat="identity") + coord_flip()
+```
+
+Word frequency in first paragraph:
+
+```{r}
+paragraph <- names(nytDat)[6] #The 6th column, "response.doc.lead_paragraph", is the one we want here.  
+
+tokenized <- nytDat %>%
+  unnest_tokens(word, paragraph) %>% 
+  anti_join(stop_words)
+  
+tokenized$clean_tokens = tokenized$word %>% 
+  str_remove_all("'s$") %>% # remove 's
+  str_remove_all("’s$") %>% # not all articles use the same apostrophe
+  str_remove_all("[:digit:]") %>% 
+  str_remove_all("^.?.$") # all words with < 3 characters
+
+tokenized %>% count(word, sort = TRUE) %>%
+  filter(n > 5) %>% #illegible with all the words displayed
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(y = NULL)
 
 ```
 
+```{r}
+# based off this it would mess some words up to stem words ending in 'ing'
+ings = str_detect(string = tokenized$clean_tokens, pattern = "ing$")
+wings = cbind(tokenized$clean_tokens, ings) %>% 
+  as.data.frame() %>% 
+  filter(ings == TRUE)
+```
+
+Word frequency using `headlines`
+(note that headlines doesn't depend on `word`, so will be the same no matter what)
+
+```{r}
+headline <- names(nytDat)[21] #The 6th column, "response.doc.lead_paragraph", is the one we want here.  
+
+tokenized_head <- nytDat %>%
+  unnest_tokens(word, headline) %>% 
+  anti_join(stop_words)
+  
+tokenized_head$clean_tokens = tokenized_head$word %>% 
+  str_remove_all("'s$") %>% # remove 's
+  str_remove_all("’s$") %>% # not all articles use the same apostrophe
+  str_remove_all("[:digit:]") %>% 
+  str_remove_all("^.?.$") # all words with < 3 characters
+
+tokenized_head %>% count(word, sort = TRUE) %>%
+  filter(n > 2) %>% #illegible with all the words displayed
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(y = NULL)
+```
+
+**Compared to the distribution of word frequencies in the first paragraph, there are fewer words that get repeated in headlines. In addition to the political keywords which appear in both lists, the headlines seem to emphasize live music more (perhaps a summer concert?) but the reduction in overall numbers makes it harder to trust any pattern that may seem to appear. There are `r length(tokenized$clean_tokens)` tokens/words in the `paragraph` subset but only `r length(tokenized_head$clean_tokens)` tokens/words in the `headline` subset. As it turns out, mining vocabulary doesn't appear to be a central part of any of these articles, though the political polarization of the topic could cause mining topics to be hidden under more common political keywords like `trump` and `america`.**
