@@ -1,0 +1,43 @@
+---
+title: "Silent Spring Senitment Analysis"
+author: "Shale"
+date: "4/13/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyr) #text analysis in R
+library(lubridate) #working with date data
+# library(pdftools) #read in pdfs
+library(tidyverse)
+library(tidytext)
+library(here)
+library(LexisNexisTools) #Nexis Uni data wrangling
+library(sentimentr)
+library(readr)
+```
+
+# 
+
+```{r}
+my_files <- list.files(pattern = ".docx", path = here("data"),
+                       full.names = TRUE, recursive = TRUE, ignore.case = TRUE)
+
+dat <- lnt_read(my_files) #Object of class 'LNT output'
+```
+
+```{r}
+# create separate dataframes for different types of analysis
+
+meta_df <- dat@meta
+articles_df <- dat@articles
+paragraphs_df <- dat@paragraphs
+```
+
+```{r}
+# create another dataframe for headlines
+heads <- data_frame(element_id = seq(1:length(meta_df$Headline)), Date = meta_df$Date, Headline = meta_df$Headline)
+```
+
