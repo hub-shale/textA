@@ -17,12 +17,13 @@ library(here)
 library(LexisNexisTools) #Nexis Uni data wrangling
 library(sentimentr)
 library(readr)
+library(textdata)
 ```
 
-# 
+# Load & Clean Data
 
 ```{r}
-my_files <- list.files(pattern = ".docx", path = here("data"),
+my_files <- list.files(pattern = "news.DOCX", path = here("data"),
                        full.names = TRUE, recursive = TRUE, ignore.case = TRUE)
 
 dat <- lnt_read(my_files) #Object of class 'LNT output'
@@ -37,7 +38,80 @@ paragraphs_df <- dat@paragraphs
 ```
 
 ```{r}
-# create another dataframe for headlines
-heads <- data_frame(element_id = seq(1:length(meta_df$Headline)), Date = meta_df$Date, Headline = meta_df$Headline)
+# create more dataframes so it's easier to join text with metadata
+heads <- data_frame(element_id = seq(1:length(meta_df$Headline)), 
+                  Date = meta_df$Date, 
+                  Headline = meta_df$Headline)
+paragraphs_dat <- data_frame(element_id = paragraphs_df$Art_ID, 
+                             Text  = paragraphs_df$Paragraph)
+
+tidypars <- inner_join(heads, paragraphs_dat, by = "element_id")
 ```
+
+## Clean paragraphs
+
+```{r}
+# remove paragraphs that contain website links or are shorter than 21 characters
+cleanpars <- tidypars %>% 
+  mutate(link = str_detect(tidypars$Text, "http", negate = TRUE)) %>% 
+  filter(link == TRUE & nchar(tidypars$Text) > 20)
+```
+
+# Get sentiment for paragraphs using NRC Emotions
+
+```{r}
+e_sents <- get_sentiments("nrc") %>% 
+  filter(!sentiment %in% c("negative", "positive"))
+
+emotions <- cleanpars %>% 
+  unnest_tokens(word, Text) %>% 
+  inner_join(e_sents) %>% 
+  na.omit() %>% 
+  group_by(Date, sentiment) %>% 
+  add_count()
+
+emotions$Date <- emotions$Date %>% str_remove_all("-\\d\\d$")
+
+Dprop <- emotions %>%
+  group_by(Date) %>%
+  summarise(prop = n / sum(n),
+            ntot = sum(n))
+  
+date_prop <- emotions %>% 
+  cbind(Dprop$prop) %>% 
+  mutate(prop = ...8) %>% 
+  select(Date, sentiment, n) 
+
+sent_prop = xtabs(n ~ Date + sentiment, date_prop) %>% 
+  proportions(margin = 1) %>% 
+  as.data.frame() 
+
+
+```
+
+# Visualize results
+
+```{r}
+ggplot(data = sent_prop, aes(x = Date, y = Freq, color = sentiment, group = sentiment)) +
+#  geom_point(alpha = .5, size = 2) + 
+  geom_smooth(se = FALSE) +
+  scale_x_discrete(guide = guide_axis(angle = 45)) + 
+  labs(title = "Monthly proportion of sentiment in 100 articles (2017-2022) \n on the search term 'Silent Spring'",
+       y = "Frequency",
+       x = "Date (yyyy-mm)") + 
+  scale_color_brewer(palette = "Paired")
+```
+
+This sentiment analysis is based on a search for the term "[Silent Spring](http://www.rachelcarson.org/SilentSpring.aspx)" on the Nexus Uni database. The results are rather surprising, given the gloomy topic of that book; but of course the texts analyzed here are at best responses to Rachel Carson's famous book, and occasionally completely unrelated. Across the entire 5 year span from 2017 to 2022, trust was the most prevalent emotion detected, followed generally by anticipation and fear. Joy also became more prominent starting in late 2019. Consistently the least frequently coded emotions are surprise, anger, and disgust.
+
+Interpreting these results in relation to expectations around _Silent Spring_ yield no clear answers: why is trust so high? Perhaps people have high trust in the accuracy of reports around environmental advocacy that has stemmed from _Silent Spring_? Probably the most understandable result is the high levels of fear - makes sense, given the gravity of the topic. 
+
+Maybe it makes sense that surprise is low (after all, this isn't a new problem), but then why is anger so low? Is the high fear / low anger interaction a suggestion that people know this is a problem but don't feel like they have control over the massive agricultural corporations responsible for much of the problem? And what the hell is going on with that sudden increase in joy in late 2019?
+
+This basic analysis is not capable of answering these questions (there are a plethora of limitations both in the data itself and the quality of the text analysis methods), but hopefully by raising them I have given you more to think about in regards to contemporary public perspective on an historic environmental topic.
+
+Notes on data presentation:
+
+Instead of aggregating by day, it made more sense to aggregate by month because of the time span the articles are written over (about 100 articles over 5 years, which is about 1 article every 18 days). The graph above uses a smoothing function (different from Froelich et al.) to avoid jumpy / uninterpretable paths for each sentiment. 
+
 
