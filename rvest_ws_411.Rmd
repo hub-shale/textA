@@ -1,0 +1,52 @@
+---
+title: "scraping with rvest"
+author: "Shale"
+date: "4/20/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(rvest)
+library(tidyverse)
+```
+
+# Setup
+
+```{r}
+url = "https://ucsb-meds.github.io/overview.html"
+
+html = read_html(url)
+
+```
+
+# Getting what you want
+
+## Text
+
+```{r}
+paragraphs = html %>% 
+  html_elements("p")
+
+paragraph_vector = paragraphs %>% 
+  html_text()
+
+titles = html %>% 
+  html_elements("title")
+
+h2 = html %>% 
+  html_elements("h2") %>% 
+  html_text()
+```
+
+## Tables
+
+```{r}
+tables_clean = html_table(html)
+
+tables_clean[[1]]
+```
+
+
+
