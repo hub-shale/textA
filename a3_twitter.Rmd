@@ -24,12 +24,16 @@ library(reshape2)
 ```{r}
 raw_tweets <- read.csv("https://raw.githubusercontent.com/MaRo406/EDS_231-text-sentiment/main/dat/IPCC_tweets_April1-10_sample.csv", header=TRUE)
 
-dat<- raw_tweets[,c(5,7)] # Extract Date and Title fields
+dat <- raw_tweets[,c(5,7)] # Extract Date and Title fields
 
 tweets <- tibble(text = dat$Title,
                   id = seq(1:length(dat$Title)),
                  date = as.Date(dat$Date,'%m/%d/%y'))
+```
 
+A quick look:
+
+```{r}
 head(tweets$text, n = 10)
 #simple plot of tweets per day
 
@@ -41,14 +45,42 @@ tweets %>%
 
 ```{r}
 #let's clean up the URLs from the tweets
-tweets$text <- gsub("http[^[:space:]]*", "",tweets$text)
-tweets$text <- str_to_lower(tweets$text)
+clean_twt = tweets
 
+clean_twt$text <- gsub("http[^[:space:]]*", "",clean_twt$text)
+clean_twt$text <- gsub("@[^[:space:]]*", "", clean_twt$text)
+clean_twt$text <- str_to_lower(clean_twt$text)
+
+```
+
+
+# Most Common Words by Day
+
+```{r}
+pop = clean_twt %>% 
+  unnest_tokens(output = word, input = text, token = "words") %>%
+  anti_join(stop_words, by = "word") %>% 
+  group_by(date, word) %>% 
+  summarise(daily_count = n()) %>% 
+  slice_max(daily_count, n=10, with_ties = FALSE)
+  
+
+ggplot(data = pop, aes(x=daily_count, y=reorder(word, daily_count))) + 
+  geom_bar(stat = "identity") +
+  facet_wrap(facets = "date", scales = "free")
+```
+
+The words `ipcc`, `climate`, and `report` are consistently the most frequently used words per day, which makes sense in a query for "IPCC." There is a distinct pattern in the count of the most common words each day: on April 1-2 there are very few mentions, probably an indicator of fewer tweets overall that fit the query; April 3rd the numbers get higher, with the term `ipcc` showing up about 100 times. Count of these words max out on April 4-5, with many hundreds of uses of `ipcc`, `climate`, and `report`; then usage steadily declines again from April 6-10.
+
+# Wordcloud
+
+```{r}
 #load sentiment lexicons
 bing_sent <- get_sentiments('bing')
 nrc_sent <- get_sentiments('nrc')
+
 #tokenize tweets to individual words
-words <- tweets %>%
+words <- clean_twt %>%
   select(id, date, text) %>%
   unnest_tokens(output = word, input = text, token = "words") %>%
   anti_join(stop_words, by = "word") %>%
@@ -59,19 +91,6 @@ words <- tweets %>%
       "positive", 1,
       "negative", -1),
     by = "sentiment")
-```
-
-
-# Most Common Words by Day
-
-```{r}
-
-```
-
-# Wordcloud
-
-```{r}
-
 ```
 
 # Most Tagged Accounts
