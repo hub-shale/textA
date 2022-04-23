@@ -17,6 +17,7 @@ library(tidytext)
 library(lubridate)
 library(wordcloud) #visualization of common words in the data set
 library(reshape2)
+library(DT)
 ```
 
 # Loading & Further Cleaning
@@ -93,15 +94,87 @@ words <- clean_twt %>%
     by = "sentiment")
 ```
 
+
+```{r}
+words %>%
+inner_join(get_sentiments("bing")) %>%
+count(word, sentiment, sort = TRUE) %>%
+acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+comparison.cloud(colors = c("red", "green"),
+                   max.words = 100)
+
+
+```
+
 # Most Tagged Accounts
 
 ```{r}
+# using quanteda and corpus() for alternate analyses
 
+corpus = corpus(dat$Title)
+
+tokens = tokens(corpus, remove_punct = TRUE, remove_numbers = TRUE) %>% 
+  tokens_remove(stopwords("english")) %>% 
+  tokens_remove("http[^[:space:]]*", valuetype = "regex") %>% 
+  tokens_tolower()
+
+tokens_at = tokens(corpus, remove_punct = TRUE, remove_numbers = TRUE) %>% 
+  tokens_keep(pattern = "@*")
+
+dfm_at = dfm(tokens_at)
+
+#this is useful!
+tstat_freq <- textstat_frequency(dfm_at, n = 100)
+
+tidy_at <- tidy(dfm_at) %>%
+   count(term) %>%
+   with(wordcloud(term, n, max.words = 25))
+
+# Show the top 10 accounts
+topten = data.frame(tstat_freq) %>% 
+  filter(rank < 11) %>%
+  select(-group) %>% 
+  datatable()
+topten
 ```
 
 # Alternate Sentiment Comparison
 
 ```{r}
+raw_sent <- raw_tweets[,c(5,7,11)] # Extract Date and Title fields
 
+tweetsent <- tibble(text = raw_sent$Title,
+                  id = seq(1:length(raw_sent$Title)),
+                 date = as.Date(raw_sent$Date,'%m/%d/%y'),
+                 sent = raw_sent$Sentiment)
+
+
+```
+
+Side Quest: Neutral Comparison
+
+```{r}
+tweets_sent <- clean_twt %>%
+  left_join(
+    words %>%
+      mutate(sent_score = replace_na(sent_score, 0)) %>% 
+      group_by(id) %>%
+      summarize(
+        sent_score = mean(sent_score, na.rm = T)),
+    by = "id")
+
+neutral <- length(which(tweets_sent$sent_score == 0))
+positive <- length(which(tweets_sent$sent_score > 0))
+negative <- length(which(tweets_sent$sent_score < 0))
+
+# graph overall sentiments
+Sentiment <- c("Positive","Neutral","Negative")
+Count <- c(positive,neutral,negative)
+output <- data.frame(Sentiment,Count)
+output$Sentiment<-factor(output$Sentiment,levels=Sentiment)
+ggplot(output, aes(x=Sentiment,y=Count))+
+  geom_bar(stat = "identity", aes(fill = Sentiment))+
+  scale_fill_manual("legend", values = c("Positive" = "green", "Neutral" = "black", "Negative" = "red"))+
+  ggtitle("Barplot of Sentiment in IPCC tweets")
 ```
 
