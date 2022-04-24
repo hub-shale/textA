@@ -2,7 +2,7 @@
 title: "Twitter Sentiment"
 author: "Shale"
 date: "4/20/2022"
-output: html_document
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -18,34 +18,23 @@ library(lubridate)
 library(wordcloud) #visualization of common words in the data set
 library(reshape2)
 library(DT)
+library(here)
 ```
 
 # Loading & Further Cleaning
 
 ```{r}
-raw_tweets <- read.csv("https://raw.githubusercontent.com/MaRo406/EDS_231-text-sentiment/main/dat/IPCC_tweets_April1-10_sample.csv", header=TRUE)
+raw_tweets <- read_csv(here("data/IPCC_tweets_April1-10_sample.csv"))
 
-dat <- raw_tweets[,c(5,7)] # Extract Date and Title fields
+dat <- raw_tweets[,c(4,6)] # Extract Date and Title fields
 
 tweets <- tibble(text = dat$Title,
                   id = seq(1:length(dat$Title)),
-                 date = as.Date(dat$Date,'%m/%d/%y'))
-```
-
-A quick look:
-
-```{r}
-head(tweets$text, n = 10)
-#simple plot of tweets per day
-
-tweets %>%
-  count(date) %>%
-  ggplot(aes(x = date, y = n))+
-  geom_line()
+                  date = as.Date(dat$Date,'%m/%d/%y'))
 ```
 
 ```{r}
-#let's clean up the URLs from the tweets
+# clean up the URLs and tagged accounts from the tweets
 clean_twt = tweets
 
 clean_twt$text <- gsub("http[^[:space:]]*", "",clean_twt$text)
@@ -133,15 +122,15 @@ tidy_at <- tidy(dfm_at) %>%
 # Show the top 10 accounts
 topten = data.frame(tstat_freq) %>% 
   filter(rank < 11) %>%
-  select(-group) %>% 
-  datatable()
+   select(-group) #%>% 
+  # datatable() # incompatible with pdf output
 topten
 ```
 
 # Alternate Sentiment Comparison
 
 ```{r}
-raw_sent <- raw_tweets[,c(5,7,11)] # Extract Date and Title fields
+raw_sent <- raw_tweets[,c(4,6,10)] # Extract Date and Title fields
 
 tweetsent <- tibble(text = raw_sent$Title,
                   id = seq(1:length(raw_sent$Title)),
@@ -155,15 +144,18 @@ bwatch = tweetsent %>%
 
 ggplot(bwatch, aes(x=sent,y=count))+
   geom_bar(stat = "identity", aes(fill = sent)) +
-  ggtitle("Barplot of Sentiment in IPCC tweets (default Brandwatch calculation)")
+  ggtitle("Barplot of Sentiment in IPCC tweets (default Brandwatch calculation)") +
+  scale_fill_manual("legend",
+                    values = c("positive" = "green",
+                               "neutral" = "black",
+                               "negative" = "red"))
 
 
 # the comparison
 tweets_sent <- words %>%
       mutate(sent_score = replace_na(sent_score, 0)) %>% 
       group_by(id) %>%
-      summarize(
-        sent_score = mean(sent_score, na.rm = T))
+      summarize(sent_score = mean(sent_score, na.rm = T))
 
 neutral <- length(which(tweets_sent$sent_score == 0))
 positive <- length(which(tweets_sent$sent_score > 0))
@@ -174,12 +166,17 @@ Sentiment <- c("Positive","Neutral","Negative")
 Count <- c(positive,neutral,negative)
 output <- data.frame(Sentiment,Count)
 output$Sentiment<-factor(output$Sentiment,levels=Sentiment)
-ggplot(output, aes(x=Sentiment,y=Count))+
-  geom_bar(stat = "identity", aes(fill = Sentiment))+
-  scale_fill_manual("legend", values = c("Positive" = "green", "Neutral" = "black", "Negative" = "red"))+
+
+ggplot(output, aes(x=Sentiment,y=Count)) +
+  geom_bar(stat = "identity",
+           aes(fill = Sentiment)) +
+  scale_fill_manual("legend",
+                    values = c("Positive" = "green",
+                               "Neutral" = "black",
+                               "Negative" = "red")) +
   ggtitle("Barplot of Sentiment in IPCC tweets")
 ```
 
-In a comparison of the default Brandwatch sentiment values and a manual calculation using the `bing` sentiment lexicon, there is a clear mismatch that highlights the ineffectiveness of the Brandwatch sentiment analysis. The primary problem with the Brandwatch sentiment is that there are 1435 tweets (out of a total of 2411) that were assigned no sentiment: not neutral, but rather just the equivalent of `NA`. Additionally, the Brandwatch analysis splits the ~1000 remaining data points into  not just `positive`, `negative`, and `neutral` categories, but also six other emotion categories (most prominently fear, joy, and sadness), which further thins out the data; in the end, this leaves only 2 tweets identified as negative and 1 as positive. In contrast, using the `bing` lexicon to identify all positive and negative words yields 1030 negative and 373 positive tweets. Additionally, by classifying all tweets that had no sentiment words (in addition to tweets that had equal amounts of positive and negative words) as neutral, most of the tweets that Brandwatch discarded as `NA` are instead able to be labeled as neutral, for a total of 995 neutral tweets (compared to Brandwatch's 28 neutral tweets).
+In a comparison of the default Brandwatch sentiment values and a manual calculation using the `bing` sentiment lexicon, there is a clear mismatch. The Brandwatch analysis labels almost all of the tweets as `neutral`, with a few `negative` and almost no `positive` tweets. In contrast, using the `bing` lexicon to identify all positive and negative words yields 1030 negative and 373 positive tweets. Even by classifying all tweets that had no sentiment words (in addition to tweets that had equal amounts of positive and negative words in the `bing` lexicon) as neutral, this method yielded a total of 995 neutral tweets, less than half of Brandwatch's 2142 `neutral` tweets.
 
 
