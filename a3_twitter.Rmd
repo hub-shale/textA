@@ -148,20 +148,22 @@ tweetsent <- tibble(text = raw_sent$Title,
                  date = as.Date(raw_sent$Date,'%m/%d/%y'),
                  sent = raw_sent$Sentiment)
 
+# default sentiment
+bwatch = tweetsent %>% 
+  group_by(sent) %>% 
+  summarise(count = n())
 
-```
+ggplot(bwatch, aes(x=sent,y=count))+
+  geom_bar(stat = "identity", aes(fill = sent)) +
+  ggtitle("Barplot of Sentiment in IPCC tweets (default Brandwatch calculation)")
 
-Side Quest: Neutral Comparison
 
-```{r}
-tweets_sent <- clean_twt %>%
-  left_join(
-    words %>%
+# the comparison
+tweets_sent <- words %>%
       mutate(sent_score = replace_na(sent_score, 0)) %>% 
       group_by(id) %>%
       summarize(
-        sent_score = mean(sent_score, na.rm = T)),
-    by = "id")
+        sent_score = mean(sent_score, na.rm = T))
 
 neutral <- length(which(tweets_sent$sent_score == 0))
 positive <- length(which(tweets_sent$sent_score > 0))
@@ -177,4 +179,7 @@ ggplot(output, aes(x=Sentiment,y=Count))+
   scale_fill_manual("legend", values = c("Positive" = "green", "Neutral" = "black", "Negative" = "red"))+
   ggtitle("Barplot of Sentiment in IPCC tweets")
 ```
+
+In a comparison of the default Brandwatch sentiment values and a manual calculation using the `bing` sentiment lexicon, there is a clear mismatch that highlights the ineffectiveness of the Brandwatch sentiment analysis. The primary problem with the Brandwatch sentiment is that there are 1435 tweets (out of a total of 2411) that were assigned no sentiment: not neutral, but rather just the equivalent of `NA`. Additionally, the Brandwatch analysis splits the ~1000 remaining data points into  not just `positive`, `negative`, and `neutral` categories, but also six other emotion categories (most prominently fear, joy, and sadness), which further thins out the data; in the end, this leaves only 2 tweets identified as negative and 1 as positive. In contrast, using the `bing` lexicon to identify all positive and negative words yields 1030 negative and 373 positive tweets. Additionally, by classifying all tweets that had no sentiment words (in addition to tweets that had equal amounts of positive and negative words) as neutral, most of the tweets that Brandwatch discarded as `NA` are instead able to be labeled as neutral, for a total of 995 neutral tweets (compared to Brandwatch's 28 neutral tweets).
+
 
