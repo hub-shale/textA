@@ -1,0 +1,93 @@
+---
+title: "Word Relationships"
+author: "Shale"
+date: "5/2/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyr) #text analysis in R
+library(pdftools)
+library(lubridate) #working with date data
+library(tidyverse)
+library(tidytext)
+library(readr)
+library(quanteda)
+library(readtext) #quanteda subpackage for reading pdf
+library(quanteda.textstats)
+library(quanteda.textplots)
+library(ggplot2)
+library(forcats)
+library(stringr)
+library(quanteda.textplots)
+library(widyr)# pairwise correlations
+library(igraph) #network plots
+library(ggraph)
+library(here)
+```
+
+# Import Data
+
+```{r}
+files <- list.files(path = here("data"), pattern = "^EPA")
+
+#ej_reports <- lapply(files, pdf_text)
+
+ej_pdf <- readtext(file = here("data", "EPAEJ*"), 
+                   docvarsfrom = "filenames", 
+                   docvarnames = c("type", "year"),
+                   sep = "_")
+
+#creating an initial corpus containing our data
+epa_corp <- corpus(x = ej_pdf, text_field = "text" )
+summary(epa_corp)
+```
+
+## Cleaning Data
+
+```{r}
+# Adding some additional, context-specific stop words to stop word lexicon
+more_stops <- c("2015","2016", "2017", "2018", "2019", "2020", "www.epa.gov", "https")
+add_stops <- tibble(word = c(stop_words$word, more_stops)) 
+stop_vec <- as_vector(add_stops)
+```
+
+```{r}
+# tokenization and cleaning
+tokens <- tokens(epa_corp, remove_punct = TRUE)
+
+toks1 <- tokens_select(tokens, min_nchar = 3) %>% 
+  tokens_tolower() %>% 
+  tokens_remove(pattern = (stop_vec))
+
+dfm <- dfm(toks1)
+```
+
+## Relationship Analysis
+
+```{r}
+# bigrams
+toks2 <- tokens_ngrams(toks1, n=2)
+dfm2 <- dfm(toks2)
+dfm2 <- dfm_remove(dfm2, pattern = c(stop_vec))
+freq_words2 <- textstat_frequency(dfm2, n=20)
+freq_words2$token <- rep("bigram", 20)
+```
+
+```{r}
+# trigrams
+toks3 <- tokens_ngrams(toks1, n=3)
+dfm3 <- dfm(toks3)
+dfm3 <- dfm_remove(dfm3, pattern = c(stop_vec))
+freq_words3 <- textstat_frequency(dfm3, n=20)
+freq_words3$token <- rep("trigram", 20)
+```
+
+```{r}
+freq_words2
+freq_words3
+```
+
+**The two tables above show the most common bigrams and trigrams in the EPAEJ Reports. A comparison of most common bigrams and trigrams shows that **
