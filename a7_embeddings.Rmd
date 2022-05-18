@@ -1,0 +1,121 @@
+---
+title: "Word Embeddings"
+author: "Shale"
+date: "5/17/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(here)
+library(tidytext)
+library(tidyverse)
+library(widyr)
+library(irlba) #singular value decomposition
+library(broom) # creating search_synonym function
+library(textdata)
+library(ggplot2)
+library(dplyr)
+```
+
+# Load Data
+
+```{r}
+# Use this file: 'glove.6B.300d.txt'
+GloVe <- read_table(here('data/glove.6B.300d.txt'), col_names = FALSE)
+
+```
+
+```{r}
+glove_matrix <- GloVe %>% 
+    column_to_rownames(var = 'X1') %>% 
+    as.matrix()
+```
+
+
+# Recreate Analyses
+
+```{r syn-function}
+search_synonyms <- function(word_vectors, selected_vector) {
+dat <- word_vectors %*% selected_vector
+    
+similarities <- dat %>%
+        tibble(token = rownames(dat), similarity = dat[,1])
+similarities %>%
+       arrange(-similarity) %>%
+        select(c(2,3))
+}
+```
+
+```{r find-synonyms}
+fall <- search_synonyms(glove_matrix, glove_matrix["fall",])
+head(fall, 15)
+
+slip <- search_synonyms(glove_matrix, glove_matrix["slip",])
+head(slip, 15)
+```
+
+```{r plot-synonyms}
+slip %>%
+    mutate(selected = "slip") %>%
+    bind_rows(fall %>%
+                  mutate(selected = "fall")) %>%
+    group_by(selected) %>%
+    top_n(15, similarity) %>%
+    ungroup %>%
+    mutate(token = reorder(token, similarity)) %>%
+    ggplot(aes(token, similarity, fill = selected)) +
+    geom_col(show.legend = FALSE) +
+    facet_wrap(~selected, scales = "free") +
+    coord_flip() +
+    theme(strip.text=element_text(hjust=0, size=12)) +
+    scale_y_continuous(expand = c(0,0)) +
+    labs(x = NULL, title = "What word vectors are most similar to slip or fall?")
+         
+```
+
+Compared to the word embeddings for `slip` and `fall` in the climbing accident data, the word embeddings from `GloVe` cover a broader range of linguistic context. This is because the texts that the embeddings are based on are more general, while the climbing accident data was specific to the context of incident reports.
+
+```{r word-math}
+snow_danger <- glove_matrix["snow",] + glove_matrix["danger",] 
+head(search_synonyms(glove_matrix, snow_danger), 15)
+
+no_snow_danger <- glove_matrix["danger",] - glove_matrix["snow",] 
+head(search_synonyms(glove_matrix, no_snow_danger), 15)
+```
+Similar to the point mentioned above, the lists for danger with and without snow are different in `GloVe` than in the climbing accident data because the texts cover a broader range of topics. Here, danger terms associated with snow are (broadly speaking) weather-related terms, while danger terms not associated with snow are much more ecclectic.
+
+# `'King' - 'Man'`
+
+```{r}
+K_M <- glove_matrix["king",] - glove_matrix["man",] 
+k = head(search_synonyms(glove_matrix, K_M), 15)
+k
+
+# Or, a single answer
+k[2,1]
+```
+
+# Exploration of Word Math
+
+## `Nature` - `Man`
+
+```{r}
+M_W <- glove_matrix["nature",] - glove_matrix["man",] 
+head(search_synonyms(glove_matrix, M_W), 15)
+```
+
+Interesting that 'nature' has a higher similarity to icasualties.org than to itself?
+
+## `Life` - `Love`
+
+```{r}
+L_P <- glove_matrix["life",] - glove_matrix["love",] 
+head(search_synonyms(glove_matrix, L_P), 15)
+```
+## `Life` - `Pain`
+
+```{r}
+MW <- glove_matrix["life",] - glove_matrix["pain",] 
+head(search_synonyms(glove_matrix, MW), 15)
+```
